@@ -2,3 +2,7 @@
 *.key
 *.pem
 /bin/
+.claude/
+ctrl-state/
+gw-state/
+*-state/
