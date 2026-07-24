@@ -28,8 +28,7 @@ const (
 
 func main() {
 	if len(os.Args) < 2 {
-		usage()
-		os.Exit(1)
+		fatalUsage()
 	}
 	switch os.Args[1] {
 	case "serve":
@@ -37,8 +36,7 @@ func main() {
 	case "admin":
 		runAdmin(os.Args[2:])
 	default:
-		usage()
-		os.Exit(1)
+		fatalUsage()
 	}
 }
 
@@ -56,6 +54,11 @@ func fatalf(format string, args ...interface{}) {
 	os.Exit(1)
 }
 
+func fatalUsage() {
+	usage()
+	os.Exit(1)
+}
+
 func openStore() *store.Store {
 	if err := os.MkdirAll(stateDir, 0700); err != nil {
 		fatalf("state dir: %v", err)
@@ -68,6 +71,9 @@ func openStore() *store.Store {
 }
 
 func loadOrCreateRootCA() *ca.RootCA {
+	if err := os.MkdirAll(stateDir, 0700); err != nil {
+		fatalf("state dir: %v", err)
+	}
 	certPath := filepath.Join(stateDir, "root-ca.crt")
 	keyPath := filepath.Join(stateDir, "root-ca.key")
 	if certPEM, err := os.ReadFile(certPath); err == nil {
@@ -208,8 +214,7 @@ func runServe() {
 
 func runAdmin(args []string) {
 	if len(args) < 1 {
-		usage()
-		os.Exit(1)
+		fatalUsage()
 	}
 	switch args[0] {
 	case "device":
@@ -224,15 +229,13 @@ func runAdmin(args []string) {
 		root := loadOrCreateRootCA()
 		runAdminGWCert(root, args[1:])
 	default:
-		usage()
-		os.Exit(1)
+		fatalUsage()
 	}
 }
 
 func runAdminDevice(st *store.Store, args []string) {
 	if len(args) < 2 {
-		usage()
-		os.Exit(1)
+		fatalUsage()
 	}
 	switch args[0] {
 	case "add":
@@ -249,15 +252,13 @@ func runAdminDevice(st *store.Store, args []string) {
 		}
 		fmt.Printf("device %q revoked\n", deviceID)
 	default:
-		usage()
-		os.Exit(1)
+		fatalUsage()
 	}
 }
 
 func runAdminPolicy(st *store.Store, args []string) {
 	if len(args) != 4 || args[0] != "add" {
-		usage()
-		os.Exit(1)
+		fatalUsage()
 	}
 	subject, resource, action := args[1], args[2], args[3]
 	if err := st.AddPolicy(subject, resource, action); err != nil {
@@ -268,8 +269,7 @@ func runAdminPolicy(st *store.Store, args []string) {
 
 func runAdminGWCert(root *ca.RootCA, args []string) {
 	if len(args) != 2 {
-		usage()
-		os.Exit(1)
+		fatalUsage()
 	}
 	outDir, ipStr := args[0], args[1]
 	ip := net.ParseIP(ipStr)
