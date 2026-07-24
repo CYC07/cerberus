@@ -40,8 +40,7 @@ type config struct {
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: ztna-gw <config.json>")
-		os.Exit(1)
+		fatalf("usage: ztna-gw <config.json>")
 	}
 	cfg, err := loadConfig(os.Args[1])
 	if err != nil {
@@ -104,6 +103,7 @@ func loadConfig(path string) (*config, error) {
 
 func pollPolicy(g *gwserver.Gateway, cfg *config, cert tls.Certificate, pool *x509.CertPool) {
 	client := &http.Client{
+		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				Certificates: []tls.Certificate{cert},
