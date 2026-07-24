@@ -40,3 +40,30 @@ func TestPipe_CopiesBothDirections(t *testing.T) {
 	bClient.Close()
 	<-done
 }
+
+func TestPipe_TerminatesWhenOneSideClosed(t *testing.T) {
+	aClient, aServer := net.Pipe()
+	bClient, bServer := net.Pipe()
+
+	done := make(chan struct{})
+	go func() {
+		gwproxy.Pipe(aServer, bServer)
+		close(done)
+	}()
+
+	// Close only bClient (the remote side), leaving aClient open/idle.
+	// This simulates a backend disconnect while the client is idle.
+	// If Pipe's internal Close calls don't work correctly, Pipe will
+	// never return and we will hit the timeout.
+	bClient.Close()
+
+	select {
+	case <-done:
+		// Pipe returned — internal close propagated correctly
+	case <-time.After(2 * time.Second):
+		t.Fatal("Pipe did not return after one side closed — likely goroutine leak")
+	}
+
+	// Clean up
+	aClient.Close()
+}
