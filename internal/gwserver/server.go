@@ -63,6 +63,7 @@ func (g *Gateway) HandleConn(conn *tls.Conn) {
 	req, err := proto.ReadConnectRequest(conn)
 	if err != nil {
 		log.Printf("gw: deny (bad request) device=%s: %v", peer.Subject.CommonName, err)
+		conn.Write([]byte{proto.StatusDeny})
 		return
 	}
 
