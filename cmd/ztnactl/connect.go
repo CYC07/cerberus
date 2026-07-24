@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cyc0logy/ztna/internal/gwproxy"
 	"github.com/cyc0logy/ztna/internal/proto"
 )
 
@@ -49,12 +48,17 @@ func cmdConnect(stateDir, gwAddr, resource string) error {
 		return errors.New("connection denied")
 	}
 
-	gwproxy.Pipe(conn, stdio{})
+	// Pipe stdin <-> conn, but exit as soon as remote closes (doesn't wait for stdin EOF).
+	// Direct io.Copy avoids gwproxy.Pipe's symmetric wg.Wait() which would block
+	// forever waiting for stdin to also close.
+	done := make(chan struct{})
+	go func() {
+		io.Copy(os.Stdout, conn)
+		close(done)
+	}()
+	go func() {
+		io.Copy(conn, os.Stdin)
+	}()
+	<-done
 	return nil
 }
-
-type stdio struct{}
-
-func (stdio) Read(p []byte) (int, error)  { return os.Stdin.Read(p) }
-func (stdio) Write(p []byte) (int, error) { return os.Stdout.Write(p) }
-func (stdio) Close() error                { return nil }
