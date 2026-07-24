@@ -205,6 +205,9 @@ func runServe() {
 			ClientCAs:    pool,
 			MinVersion:   tls.VersionTLS13,
 		},
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 	fmt.Println("ztna-ctrl listening on :8443")
 	if err := httpSrv.ListenAndServeTLS("", ""); err != nil {
@@ -301,8 +304,21 @@ func runAdminGWCert(root *ca.RootCA, args []string) {
 	if err := os.WriteFile(filepath.Join(outDir, "ca.crt"), ca.EncodeCertPEM(root.Cert), 0644); err != nil {
 		fatalf("write ca cert: %v", err)
 	}
-	fmt.Println("gw cert written to", outDir)
-	fmt.Println("also copy", filepath.Join(stateDir, "jwt.pub"), "to the gateway host")
+
+	// Ensure the JWT signing keypair exists (it's otherwise created lazily
+	// by `serve` on first run) and bundle its public key alongside the
+	// gateway's cert/key/CA so the output directory is self-contained and
+	// ready to copy to the gateway host, even if `serve` has never run.
+	loadOrCreateSigner()
+	jwtPub, err := os.ReadFile(filepath.Join(stateDir, "jwt.pub"))
+	if err != nil {
+		fatalf("read jwt pubkey: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, "jwt.pub"), jwtPub, 0644); err != nil {
+		fatalf("write jwt pubkey: %v", err)
+	}
+
+	fmt.Println("gw cert bundle written to", outDir)
 }
 
 func randomToken() string {

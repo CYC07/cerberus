@@ -287,6 +287,55 @@ func TestHandleConn_DeniesBadRequest(t *testing.T) {
 	require.Equal(t, proto.StatusDeny, status[0]) // policy blocks this, but proves server is still up
 }
 
+// TestHandleConn_ClosesUnauthenticatedConnectionAfterDeadline is a
+// regression test for the slowloris/resource-exhaustion fix: a peer that
+// completes the mTLS handshake but never sends the connect-request frame
+// must not be able to hold the server-side goroutine and file descriptor
+// open forever. HandleConn sets a deadline before Handshake()/ReadConnectRequest,
+// so the server should close this connection on its own well within the
+// generous bound used by this test.
+func TestHandleConn_ClosesUnauthenticatedConnectionAfterDeadline(t *testing.T) {
+	root := ztnatest.NewRootCA(t)
+	pool := x509.NewCertPool()
+	pool.AddCert(root.Cert)
+
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	serverCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
+
+	clientKey, clientCert := ztnatest.IssueDeviceCert(t, root, "device-a")
+	tlsClientCert := ztnatest.TLSCertificate(t, clientCert, clientKey)
+
+	pub, priv, err := authjwt.GenerateKey()
+	require.NoError(t, err)
+	signer := authjwt.NewSigner(priv, pub)
+
+	backend := ztnatest.EchoServer(t)
+	g := gwserver.New(signer, map[string]string{"echo": backend.Addr().String()})
+	g.SetPolicy(policy.NewEngine([]policy.Rule{{Subject: "device-a", Resource: "echo", Action: "allow"}}))
+
+	addr := startGateway(t, g, serverCert, pool)
+	conn := dial(t, addr, tlsClientCert, pool)
+	defer conn.Close()
+
+	// Complete the TLS handshake but deliberately never write the
+	// connect-request frame that HandleConn is waiting to read.
+	require.NoError(t, conn.Handshake())
+
+	// Use a generous read deadline on our side so that if the server's own
+	// deadline enforcement is broken (i.e. this test is failing to catch a
+	// regression), the test fails with a clear timeout rather than hanging
+	// the whole suite forever.
+	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
+	buf := make([]byte, 1)
+	start := time.Now()
+	_, err = conn.Read(buf)
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "server must close idle unauthenticated connections rather than hold them open forever")
+	require.Less(t, elapsed, 20*time.Second,
+		"connection was not closed by the server's own deadline; it hit this test's fallback read deadline instead")
+}
+
 func TestHandleConn_DeniesBackendDialFailure(t *testing.T) {
 	root := ztnatest.NewRootCA(t)
 	pool := x509.NewCertPool()
