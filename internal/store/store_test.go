@@ -93,3 +93,27 @@ func TestAddPolicy_RejectsInvalidAction(t *testing.T) {
 	err := s.AddPolicy("device-a", "ssh-homepc", "maybe")
 	require.Error(t, err)
 }
+
+func TestStoreMethodsAfterClose(t *testing.T) {
+	s := openTestStore(t)
+	s.Close() // Close the store
+
+	// All methods should now error due to closed database
+	err := s.AddPendingDevice("device-x", "tok-x")
+	require.Error(t, err)
+
+	_, err = s.GetDeviceByID("device-x")
+	require.Error(t, err)
+
+	err = s.AddPolicy("device-x", "res-x", "allow")
+	require.Error(t, err)
+
+	_, err = s.ListPolicies()
+	require.Error(t, err)
+}
+
+func TestOpen_NonexistentDir(t *testing.T) {
+	// Try to open a database in a directory that does not exist
+	_, err := store.Open("/nonexistent-dir-xyz-12345/test.db")
+	require.Error(t, err)
+}
