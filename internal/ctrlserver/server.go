@@ -1,6 +1,6 @@
-// Package ctrlserver implements ztna-ctrl's HTTP handlers: device
+// Package ctrlserver implements cerberus-ctrl's HTTP handlers: device
 // enrollment (CSR signing), login (cert -> JWT), and policy distribution
-// to ztna-gw.
+// to cerberus-gw.
 package ctrlserver
 
 import (
@@ -11,12 +11,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cyc0logy/ztna/internal/authjwt"
-	"github.com/cyc0logy/ztna/internal/ca"
-	"github.com/cyc0logy/ztna/internal/store"
+	"github.com/CYC07/cerberus/internal/authjwt"
+	"github.com/CYC07/cerberus/internal/ca"
+	"github.com/CYC07/cerberus/internal/store"
 )
 
-// Server holds ztna-ctrl's dependencies for its HTTP handlers.
+// Server holds cerberus-ctrl's dependencies for its HTTP handlers.
 type Server struct {
 	Store    *store.Store
 	RootCA   *ca.RootCA
@@ -110,10 +110,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}{Token: token})
 }
 
-// handlePolicy serves the full policy rule set to ztna-gw only, identified
+// handlePolicy serves the full policy rule set to cerberus-gw only, identified
 // by its client cert's CommonName.
 func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
-	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || r.TLS.PeerCertificates[0].Subject.CommonName != "ztna-gw" {
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || r.TLS.PeerCertificates[0].Subject.CommonName != "cerberus-gw" {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}

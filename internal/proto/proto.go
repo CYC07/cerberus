@@ -1,5 +1,5 @@
-// Package proto defines the small framed protocol ztnactl speaks to
-// ztna-gw after the mTLS handshake completes: a resource name and a JWT,
+// Package proto defines the small framed protocol cerberusctl speaks to
+// cerberus-gw after the mTLS handshake completes: a resource name and a JWT,
 // each length-prefixed, followed by a single-byte allow/deny response.
 package proto
 
@@ -49,7 +49,7 @@ func ReadFrame(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
-// ConnectRequest is what ztnactl sends immediately after the mTLS
+// ConnectRequest is what cerberusctl sends immediately after the mTLS
 // handshake completes, before any raw proxied bytes.
 type ConnectRequest struct {
 	Resource string

@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cyc0logy/ztna/internal/proto"
+	"github.com/CYC07/cerberus/internal/proto"
 )
 
 func cmdConnect(stateDir, gwAddr, resource string) error {

@@ -9,11 +9,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/authjwt"
-	"github.com/cyc0logy/ztna/internal/gwserver"
-	"github.com/cyc0logy/ztna/internal/policy"
-	"github.com/cyc0logy/ztna/internal/proto"
-	"github.com/cyc0logy/ztna/internal/ztnatest"
+	"github.com/CYC07/cerberus/internal/authjwt"
+	"github.com/CYC07/cerberus/internal/gwserver"
+	"github.com/CYC07/cerberus/internal/policy"
+	"github.com/CYC07/cerberus/internal/proto"
+	"github.com/CYC07/cerberus/internal/ztnatest"
 )
 
 // dial establishes a real mTLS connection over loopback TCP to the
@@ -45,7 +45,7 @@ func TestHandleConn_AllowsTrustedDeviceWithMatchingPolicy(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	serverCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
 
 	clientKey, clientCert := ztnatest.IssueDeviceCert(t, root, "device-a")
@@ -88,7 +88,7 @@ func TestHandleConn_DeniesPolicyMismatch(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	serverCert2 := ztnatest.TLSCertificate(t, gwCert, gwKey)
 
 	clientKey, clientCert := ztnatest.IssueDeviceCert(t, root, "device-a")
@@ -122,7 +122,7 @@ func TestHandleConn_DeniesExpiredJWT(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	serverCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
 
 	clientKey, clientCert := ztnatest.IssueDeviceCert(t, root, "device-a")
@@ -161,7 +161,7 @@ func TestHandleConn_DeniesJWTCertMismatch(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	serverCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
 
 	_, aCert := ztnatest.IssueDeviceCert(t, root, "device-a")
@@ -204,7 +204,7 @@ func TestHandleConn_DeniesUnknownResource(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	serverCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
 
 	clientKey, clientCert := ztnatest.IssueDeviceCert(t, root, "device-a")
@@ -237,7 +237,7 @@ func TestHandleConn_DeniesBadRequest(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	serverCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
 
 	clientKey, clientCert := ztnatest.IssueDeviceCert(t, root, "device-a")
@@ -299,7 +299,7 @@ func TestHandleConn_ClosesUnauthenticatedConnectionAfterDeadline(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	serverCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
 
 	clientKey, clientCert := ztnatest.IssueDeviceCert(t, root, "device-a")
@@ -341,7 +341,7 @@ func TestHandleConn_DeniesBackendDialFailure(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	serverCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
 
 	clientKey, clientCert := ztnatest.IssueDeviceCert(t, root, "device-a")

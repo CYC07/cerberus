@@ -1,4 +1,4 @@
-module github.com/cyc0logy/ztna
+module github.com/CYC07/cerberus
 
 go 1.26.5
 

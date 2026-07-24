@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cyc0logy/ztna/internal/authjwt"
-	"github.com/cyc0logy/ztna/internal/gwserver"
-	"github.com/cyc0logy/ztna/internal/policy"
+	"github.com/CYC07/cerberus/internal/authjwt"
+	"github.com/CYC07/cerberus/internal/gwserver"
+	"github.com/CYC07/cerberus/internal/policy"
 )
 
 // config is a JSON file, e.g.:
@@ -40,7 +40,7 @@ type config struct {
 
 func main() {
 	if len(os.Args) != 2 {
-		fatalf("usage: ztna-gw <config.json>")
+		fatalf("usage: cerberus-gw <config.json>")
 	}
 	cfg, err := loadConfig(os.Args[1])
 	if err != nil {
@@ -78,7 +78,7 @@ func main() {
 	if err != nil {
 		fatalf("listen: %v", err)
 	}
-	fmt.Println("ztna-gw listening on", cfg.ListenAddr)
+	fmt.Println("cerberus-gw listening on", cfg.ListenAddr)
 	if err := gwserver.Serve(ln, g); err != nil {
 		fatalf("serve: %v", err)
 	}

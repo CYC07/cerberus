@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cyc0logy/ztna/internal/ca"
+	"github.com/CYC07/cerberus/internal/ca"
 )
 
 // NewRootCA creates a fresh root CA for a single test.

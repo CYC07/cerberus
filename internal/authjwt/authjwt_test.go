@@ -7,8 +7,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/authjwt"
-	"github.com/cyc0logy/ztna/internal/ztnatest"
+	"github.com/CYC07/cerberus/internal/authjwt"
+	"github.com/CYC07/cerberus/internal/ztnatest"
 )
 
 func TestIssueAndVerify_RoundTrips(t *testing.T) {

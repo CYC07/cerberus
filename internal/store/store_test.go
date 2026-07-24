@@ -6,12 +6,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/store"
+	"github.com/CYC07/cerberus/internal/store"
 )
 
 func openTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "ztna.db"))
+	s, err := store.Open(filepath.Join(t.TempDir(), "cerberus.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { s.Close() })
 	return s

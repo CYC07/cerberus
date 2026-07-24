@@ -14,10 +14,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cyc0logy/ztna/internal/authjwt"
-	"github.com/cyc0logy/ztna/internal/ca"
-	"github.com/cyc0logy/ztna/internal/ctrlserver"
-	"github.com/cyc0logy/ztna/internal/store"
+	"github.com/CYC07/cerberus/internal/authjwt"
+	"github.com/CYC07/cerberus/internal/ca"
+	"github.com/CYC07/cerberus/internal/ctrlserver"
+	"github.com/CYC07/cerberus/internal/store"
 )
 
 const (
@@ -42,11 +42,11 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  ztna-ctrl serve
-  ztna-ctrl admin device add <device_id>
-  ztna-ctrl admin device revoke <device_id>
-  ztna-ctrl admin policy add <subject> <resource> <allow|deny>
-  ztna-ctrl admin gw-cert <output_dir> <gateway_ip>`)
+  cerberus-ctrl serve
+  cerberus-ctrl admin device add <device_id>
+  cerberus-ctrl admin device revoke <device_id>
+  cerberus-ctrl admin policy add <subject> <resource> <allow|deny>
+  cerberus-ctrl admin gw-cert <output_dir> <gateway_ip>`)
 }
 
 func fatalf(format string, args ...interface{}) {
@@ -63,7 +63,7 @@ func openStore() *store.Store {
 	if err := os.MkdirAll(stateDir, 0700); err != nil {
 		fatalf("state dir: %v", err)
 	}
-	st, err := store.Open(filepath.Join(stateDir, "ztna.db"))
+	st, err := store.Open(filepath.Join(stateDir, "cerberus.db"))
 	if err != nil {
 		fatalf("open store: %v", err)
 	}
@@ -91,7 +91,7 @@ func loadOrCreateRootCA() *ca.RootCA {
 		}
 		return &ca.RootCA{Cert: cert, Key: key}
 	}
-	root, err := ca.GenerateRootCA("ztna-root", 10*365*24*time.Hour)
+	root, err := ca.GenerateRootCA("cerberus-root", 10*365*24*time.Hour)
 	if err != nil {
 		fatalf("generate root ca: %v", err)
 	}
@@ -156,7 +156,7 @@ func loadOrIssueServerCert(root *ca.RootCA) tls.Certificate {
 	if err != nil {
 		fatalf("generate server key: %v", err)
 	}
-	cert, err := root.IssueCert("ztna-ctrl", &key.PublicKey, certTTL, net.ParseIP("127.0.0.1"))
+	cert, err := root.IssueCert("cerberus-ctrl", &key.PublicKey, certTTL, net.ParseIP("127.0.0.1"))
 	if err != nil {
 		fatalf("issue server cert: %v", err)
 	}
@@ -209,7 +209,7 @@ func runServe() {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	fmt.Println("ztna-ctrl listening on :8443")
+	fmt.Println("cerberus-ctrl listening on :8443")
 	if err := httpSrv.ListenAndServeTLS("", ""); err != nil {
 		fatalf("serve: %v", err)
 	}
@@ -286,7 +286,7 @@ func runAdminGWCert(root *ca.RootCA, args []string) {
 	if err != nil {
 		fatalf("generate key: %v", err)
 	}
-	cert, err := root.IssueCert("ztna-gw", &key.PublicKey, certTTL, ip)
+	cert, err := root.IssueCert("cerberus-gw", &key.PublicKey, certTTL, ip)
 	if err != nil {
 		fatalf("issue cert: %v", err)
 	}

@@ -9,7 +9,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/cyc0logy/ztna/internal/policy"
+	"github.com/CYC07/cerberus/internal/policy"
 )
 
 // Store wraps a SQLite database of registered devices and policy rules.
@@ -132,7 +132,7 @@ func (s *Store) GetDeviceByID(deviceID string) (*Device, error) {
 	return &d, nil
 }
 
-// RevokeDevice marks a device as revoked; ztna-ctrl will refuse it a new
+// RevokeDevice marks a device as revoked; cerberus-ctrl will refuse it a new
 // JWT on its next login attempt.
 func (s *Store) RevokeDevice(deviceID string) error {
 	res, err := s.db.Exec(`UPDATE devices SET revoked = 1 WHERE device_id = ?`, deviceID)

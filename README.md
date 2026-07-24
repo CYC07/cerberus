@@ -1,4 +1,4 @@
-# ztna
+# Cerberus
 
 A Zero Trust Network Access (ZTNA) system, built from scratch in Go.
 
@@ -18,29 +18,29 @@ for the implementation plan.
 
 ## Architecture
 
-Three binaries, split control plane / data plane:
+Three binaries, split control plane / data plane — three heads, one system:
 
-- **`ztna-ctrl`** — the control plane. Runs its own mini CA, issues
+- **`cerberus-ctrl`** — the control plane. Runs its own mini CA, issues
   X.509 client certificates to enrolled devices, issues short-lived
   Ed25519-signed JWTs bound to the requesting certificate's thumbprint,
   and holds policy (`subject → resource → allow|deny`) in SQLite.
-- **`ztna-gw`** — the data plane gateway. Sits in front of a protected
+- **`cerberus-gw`** — the data plane gateway. Sits in front of a protected
   resource (SSH, by default). Requires mTLS, verifies the client's JWT
   is valid **and** was issued for the exact certificate presenting it,
   checks policy, then proxies raw TCP to the backend. Every denial —
   bad cert, expired token, mismatched thumbprint, policy deny, unknown
   resource — returns an identical generic rejection to the client; the
   real reason is logged server-side only.
-- **`ztnactl`** — the client CLI. `enroll` (get a cert), `login` (get a
-  token), `connect` (open an authorized tunnel — usable as an SSH
+- **`cerberusctl`** — the client CLI. `enroll` (get a cert), `login` (get
+  a token), `connect` (open an authorized tunnel — usable as an SSH
   `ProxyCommand`).
 
 ```
-ztnactl  --mTLS-->  ztna-gw  --mTLS-->  ztna-ctrl   (policy sync, every 30s)
-   |                    |
-   `--- mTLS+JWT -------'
-                         |
-                         `--> backend (sshd:22)
+cerberusctl  --mTLS-->  cerberus-gw  --mTLS-->  cerberus-ctrl   (policy sync, every 30s)
+    |                        |
+    `--- mTLS+JWT -----------'
+                              |
+                              `--> backend (sshd:22)
 ```
 
 The single property this whole design exists to prove: **a valid JWT
@@ -70,43 +70,44 @@ self-hosted and runs on one machine.
 ## Build
 
 ```bash
-go build -o bin/ztna-ctrl ./cmd/ztna-ctrl
-go build -o bin/ztna-gw   ./cmd/ztna-gw
-go build -o bin/ztnactl   ./cmd/ztnactl
+go build -o bin/cerberus-ctrl ./cmd/cerberus-ctrl
+go build -o bin/cerberus-gw   ./cmd/cerberus-gw
+go build -o bin/cerberusctl   ./cmd/cerberusctl
 ```
 
 ## Setup
 
 All three binaries persist state under `./ctrl-state`, `./gw-state`, and
-`$ZTNA_STATE_DIR` (default `~/.ztna`) respectively, relative to wherever
-you run them. Run `ztna-ctrl` from one directory and keep it there.
+`$CERBERUS_STATE_DIR` (default `~/.cerberus`) respectively, relative to
+wherever you run them. Run `cerberus-ctrl` from one directory and keep it
+there.
 
 **1. Start the control plane** (generates its root CA and JWT signing key
 on first run):
 
 ```bash
-./bin/ztna-ctrl serve &
+./bin/cerberus-ctrl serve &
 ```
 
 **2. Register a policy** — which device may reach which resource:
 
 ```bash
-./bin/ztna-ctrl admin policy add my-pc ssh-homepc allow
+./bin/cerberus-ctrl admin policy add my-pc ssh-homepc allow
 ```
 
 **3. Register a client device** and note the enrollment token it prints:
 
 ```bash
-./bin/ztna-ctrl admin device add my-pc
+./bin/cerberus-ctrl admin device add my-pc
 # device "my-pc" registered. enrollment token: <64 hex chars>
 ```
 
 **4. Issue the gateway its own certificate.** This bundles everything
-`ztna-gw` needs — its cert, key, the CA cert, and the control plane's
+`cerberus-gw` needs — its cert, key, the CA cert, and the control plane's
 JWT public key — into one self-contained directory:
 
 ```bash
-./bin/ztna-ctrl admin gw-cert ./gw-state 127.0.0.1
+./bin/cerberus-ctrl admin gw-cert ./gw-state 127.0.0.1
 ```
 
 **5. Configure and start the gateway**, pointing at whatever resource
@@ -125,30 +126,30 @@ cat > gw-config.json <<'EOF'
 }
 EOF
 
-./bin/ztna-gw ./gw-config.json &
+./bin/cerberus-gw ./gw-config.json &
 ```
 
 **6. Enroll and connect from the client**, using the token from step 3:
 
 ```bash
-export ZTNA_STATE_DIR=./ztnactl-state
+export CERBERUS_STATE_DIR=./cerberusctl-state
 
-./bin/ztnactl enroll 127.0.0.1:8443 ./ctrl-state/root-ca.crt <token>
-./bin/ztnactl login  127.0.0.1:8443
-./bin/ztnactl connect 127.0.0.1:9443 ssh-homepc
+./bin/cerberusctl enroll 127.0.0.1:8443 ./ctrl-state/root-ca.crt <token>
+./bin/cerberusctl login  127.0.0.1:8443
+./bin/cerberusctl connect 127.0.0.1:9443 ssh-homepc
 ```
 
 That last command speaks raw stdin/stdout over the authorized tunnel —
 use it as an SSH `ProxyCommand` for a real session:
 
 ```bash
-ssh -o ProxyCommand="ZTNA_STATE_DIR=./ztnactl-state ./bin/ztnactl connect 127.0.0.1:9443 ssh-homepc" \
+ssh -o ProxyCommand="CERBERUS_STATE_DIR=./cerberusctl-state ./bin/cerberusctl connect 127.0.0.1:9443 ssh-homepc" \
     someuser@ssh-homepc
 ```
 
 A device with no matching policy, an expired token, or a token that
 doesn't match its presenting certificate all get the same generic
-rejection — check `ztna-gw`'s log output for the real reason.
+rejection — check `cerberus-gw`'s log output for the real reason.
 
 ## Testing
 
@@ -163,10 +164,10 @@ connect flow end to end, including the critical cert/JWT-binding test.
 
 ## Security notes
 
-- Revocation (`ztna-ctrl admin device revoke <id>`) blocks future logins
-  immediately, but a JWT already issued to that device stays valid until
-  its TTL expires (15 minutes by default) — this is a known limitation
-  of the stateless-token design, not a bug.
+- Revocation (`cerberus-ctrl admin device revoke <id>`) blocks future
+  logins immediately, but a JWT already issued to that device stays valid
+  until its TTL expires (15 minutes by default) — this is a known
+  limitation of the stateless-token design, not a bug.
 - All private key material is written `0600`; public certs `0644`.
 - The gateway and control-plane HTTP listeners both enforce read/write
   timeouts to resist slow-connection resource exhaustion.

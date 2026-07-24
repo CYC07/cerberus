@@ -17,7 +17,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cyc0logy/ztna/internal/ca"
+	"github.com/CYC07/cerberus/internal/ca"
 )
 
 func cmdEnroll(stateDir, ctrlAddr, caCertPath, token string) error {

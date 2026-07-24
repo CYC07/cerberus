@@ -19,17 +19,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/authjwt"
-	"github.com/cyc0logy/ztna/internal/ca"
-	"github.com/cyc0logy/ztna/internal/ctrlserver"
-	"github.com/cyc0logy/ztna/internal/store"
-	"github.com/cyc0logy/ztna/internal/ztnatest"
+	"github.com/CYC07/cerberus/internal/authjwt"
+	"github.com/CYC07/cerberus/internal/ca"
+	"github.com/CYC07/cerberus/internal/ctrlserver"
+	"github.com/CYC07/cerberus/internal/store"
+	"github.com/CYC07/cerberus/internal/ztnatest"
 )
 
 func newTestServer(t *testing.T) (*ctrlserver.Server, *ca.RootCA) {
 	t.Helper()
 	root := ztnatest.NewRootCA(t)
-	st, err := store.Open(filepath.Join(t.TempDir(), "ztna.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "cerberus.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { st.Close() })
 
@@ -194,7 +194,7 @@ func TestPolicy_RequiresGatewayIdentity(t *testing.T) {
 	srv, root := newTestServer(t)
 	ts := startTestHTTPS(t, srv, root)
 
-	key, cert := ztnatest.IssueDeviceCert(t, root, "device-a") // not "ztna-gw"
+	key, cert := ztnatest.IssueDeviceCert(t, root, "device-a") // not "cerberus-gw"
 	tlsCert := ztnatest.TLSCertificate(t, cert, key)
 	resp, err := httpsClient(&tlsCert).Get(ts.URL + "/policy")
 	require.NoError(t, err)
@@ -208,7 +208,7 @@ func TestPolicy_ReturnsRulesForGateway(t *testing.T) {
 
 	require.NoError(t, srv.Store.AddPolicy("device-a", "ssh-homepc", "allow"))
 
-	key, cert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	key, cert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	tlsCert := ztnatest.TLSCertificate(t, cert, key)
 	resp, err := httpsClient(&tlsCert).Get(ts.URL + "/policy")
 	require.NoError(t, err)

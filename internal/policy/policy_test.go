@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/policy"
+	"github.com/CYC07/cerberus/internal/policy"
 )
 
 func TestEvaluate_AllowsMatchingRule(t *testing.T) {

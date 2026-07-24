@@ -1,4 +1,4 @@
-// Package gwserver implements ztna-gw's connection handling: mTLS peer
+// Package gwserver implements cerberus-gw's connection handling: mTLS peer
 // identity, JWT verification bound to that identity, policy enforcement,
 // and proxying to the resource's backend.
 package gwserver
@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cyc0logy/ztna/internal/authjwt"
-	"github.com/cyc0logy/ztna/internal/gwproxy"
-	"github.com/cyc0logy/ztna/internal/policy"
-	"github.com/cyc0logy/ztna/internal/proto"
+	"github.com/CYC07/cerberus/internal/authjwt"
+	"github.com/CYC07/cerberus/internal/gwproxy"
+	"github.com/CYC07/cerberus/internal/policy"
+	"github.com/CYC07/cerberus/internal/proto"
 )
 
 // handshakeTimeout bounds how long an unauthenticated peer may take to

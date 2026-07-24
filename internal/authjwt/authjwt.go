@@ -18,19 +18,19 @@ type Signer struct {
 }
 
 // NewSigner wraps a keypair. priv may be nil for a verify-only Signer
-// (used by ztna-gw, which only ever verifies tokens issued by ztna-ctrl).
+// (used by cerberus-gw, which only ever verifies tokens issued by cerberus-ctrl).
 func NewSigner(priv ed25519.PrivateKey, pub ed25519.PublicKey) *Signer {
 	return &Signer{priv: priv, pub: pub}
 }
 
-// GenerateKey creates a new Ed25519 signing keypair for ztna-ctrl.
+// GenerateKey creates a new Ed25519 signing keypair for cerberus-ctrl.
 func GenerateKey() (ed25519.PublicKey, ed25519.PrivateKey, error) {
 	return ed25519.GenerateKey(nil)
 }
 
 // Claims are the cert-bound session token claims. CertThumbprint must match
 // the SHA-256 thumbprint of the client certificate presenting this token —
-// verified by the caller (ztna-gw), not by Verify itself, since Verify has
+// verified by the caller (cerberus-gw), not by Verify itself, since Verify has
 // no access to the connection's peer certificate.
 type Claims struct {
 	DeviceID       string `json:"device_id"`

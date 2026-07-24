@@ -21,14 +21,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/authjwt"
-	"github.com/cyc0logy/ztna/internal/ca"
-	"github.com/cyc0logy/ztna/internal/ctrlserver"
-	"github.com/cyc0logy/ztna/internal/gwserver"
-	"github.com/cyc0logy/ztna/internal/policy"
-	"github.com/cyc0logy/ztna/internal/proto"
-	"github.com/cyc0logy/ztna/internal/store"
-	"github.com/cyc0logy/ztna/internal/ztnatest"
+	"github.com/CYC07/cerberus/internal/authjwt"
+	"github.com/CYC07/cerberus/internal/ca"
+	"github.com/CYC07/cerberus/internal/ctrlserver"
+	"github.com/CYC07/cerberus/internal/gwserver"
+	"github.com/CYC07/cerberus/internal/policy"
+	"github.com/CYC07/cerberus/internal/proto"
+	"github.com/CYC07/cerberus/internal/store"
+	"github.com/CYC07/cerberus/internal/ztnatest"
 )
 
 type harness struct {
@@ -46,7 +46,7 @@ func newHarness(t *testing.T) *harness {
 	pool := x509.NewCertPool()
 	pool.AddCert(root.Cert)
 
-	st, err := store.Open(filepath.Join(t.TempDir(), "ztna.db"))
+	st, err := store.Open(filepath.Join(t.TempDir(), "cerberus.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { st.Close() })
 
@@ -68,7 +68,7 @@ func newHarness(t *testing.T) *harness {
 
 	backend := ztnatest.EchoServer(t)
 
-	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "ztna-gw")
+	gwKey, gwCert := ztnatest.IssueDeviceCert(t, root, "cerberus-gw")
 	gwServerCert := ztnatest.TLSCertificate(t, gwCert, gwKey)
 	verifySigner := authjwt.NewSigner(nil, pub) // gw verify-only, matches ctrl-server's pubkey
 
@@ -285,7 +285,7 @@ func TestE2E_JWTFromDifferentCertRejected(t *testing.T) {
 
 	keyB, certB := h.enrollDevice(t, "device-b")
 	require.NoError(t, h.ctrlSrv.Store.AddPolicy("device-b", "ssh-homepc", "allow"))
-	// refresh gw's policy snapshot the same way ztna-gw's poller would
+	// refresh gw's policy snapshot the same way cerberus-gw's poller would
 	rules, err := h.ctrlSrv.Store.ListPolicies()
 	require.NoError(t, err)
 	_ = rules // gw's harness policy was set once at construction; device-b's

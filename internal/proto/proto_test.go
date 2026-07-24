@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/proto"
+	"github.com/CYC07/cerberus/internal/proto"
 )
 
 func TestConnectRequest_RoundTrips(t *testing.T) {

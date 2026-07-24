@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/gwproxy"
+	"github.com/CYC07/cerberus/internal/gwproxy"
 )
 
 func TestPipe_CopiesBothDirections(t *testing.T) {

@@ -11,11 +11,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cyc0logy/ztna/internal/ca"
+	"github.com/CYC07/cerberus/internal/ca"
 )
 
 func TestIssueCert_VerifiesAgainstRoot(t *testing.T) {
-	root, err := ca.GenerateRootCA("ztna-root", 24*time.Hour)
+	root, err := ca.GenerateRootCA("cerberus-root", 24*time.Hour)
 	require.NoError(t, err)
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -35,7 +35,7 @@ func TestIssueCert_VerifiesAgainstRoot(t *testing.T) {
 }
 
 func TestIssueCert_RejectsWrongRoot(t *testing.T) {
-	root, err := ca.GenerateRootCA("ztna-root", 24*time.Hour)
+	root, err := ca.GenerateRootCA("cerberus-root", 24*time.Hour)
 	require.NoError(t, err)
 	otherRoot, err := ca.GenerateRootCA("other-root", 24*time.Hour)
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestIssueCert_RejectsWrongRoot(t *testing.T) {
 }
 
 func TestEncodeDecodeCertPEM_RoundTrips(t *testing.T) {
-	root, err := ca.GenerateRootCA("ztna-root", 24*time.Hour)
+	root, err := ca.GenerateRootCA("cerberus-root", 24*time.Hour)
 	require.NoError(t, err)
 
 	pemBytes := ca.EncodeCertPEM(root.Cert)
@@ -76,7 +76,7 @@ func TestEncodeDecodeECKeyPEM_RoundTrips(t *testing.T) {
 }
 
 func TestIssueCert_WithIPSANs(t *testing.T) {
-	root, err := ca.GenerateRootCA("ztna-root", 24*time.Hour)
+	root, err := ca.GenerateRootCA("cerberus-root", 24*time.Hour)
 	require.NoError(t, err)
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -91,7 +91,7 @@ func TestIssueCert_WithIPSANs(t *testing.T) {
 }
 
 func TestIssueCert_NilPublicKey(t *testing.T) {
-	root, err := ca.GenerateRootCA("ztna-root", 24*time.Hour)
+	root, err := ca.GenerateRootCA("cerberus-root", 24*time.Hour)
 	require.NoError(t, err)
 
 	_, err = root.IssueCert("device-a", nil, time.Hour)
