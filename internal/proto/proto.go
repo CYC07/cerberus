@@ -16,7 +16,8 @@ const (
 
 // maxFrameSize bounds a single frame (resource name or JWT) well above any
 // real value, to reject obviously malicious oversized length prefixes.
-const maxFrameSize = 1 << 16 // 64KiB
+// Set to the max value representable in uint16 to avoid truncation.
+const maxFrameSize = (1 << 16) - 1 // 65535
 
 var ErrFrameTooLarge = errors.New("proto: frame exceeds max size")
 
