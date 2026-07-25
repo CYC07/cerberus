@@ -62,7 +62,10 @@ CREATE TABLE IF NOT EXISTS policies (
 	action TEXT NOT NULL CHECK(action IN ('allow','deny')),
 	UNIQUE(subject, resource)
 );`)
-	return err
+	if err != nil {
+		return err
+	}
+	return migrateMeshColumns(db)
 }
 
 // AddPendingDevice registers a device awaiting enrollment, keyed by a
