@@ -53,3 +53,50 @@ func TestSetMeshPubkeyThenUpdateMeshEndpoint_Roundtrip(t *testing.T) {
 	// No direct getter yet (added in Task 4's ListMeshDevices) — this test
 	// only proves both calls succeed against a real column set.
 }
+
+func TestAllocateMeshIP_UnknownDeviceFails(t *testing.T) {
+	s := openTestStore(t)
+	_, err := s.AllocateMeshIP("no-such-device")
+	require.ErrorIs(t, err, store.ErrNotFound)
+}
+
+func TestAllocateMeshIP_StartsAtDotOne(t *testing.T) {
+	s := openTestStore(t)
+	require.NoError(t, s.AddPendingDevice("device-a", "tok-123"))
+	require.NoError(t, s.CompleteEnrollment("device-a", "cert-pem", "serial-1"))
+
+	ip, err := s.AllocateMeshIP("device-a")
+	require.NoError(t, err)
+	require.Equal(t, "100.64.0.1", ip)
+}
+
+func TestAllocateMeshIP_IsIdempotent(t *testing.T) {
+	s := openTestStore(t)
+	require.NoError(t, s.AddPendingDevice("device-a", "tok-123"))
+	require.NoError(t, s.CompleteEnrollment("device-a", "cert-pem", "serial-1"))
+
+	first, err := s.AllocateMeshIP("device-a")
+	require.NoError(t, err)
+	second, err := s.AllocateMeshIP("device-a")
+	require.NoError(t, err)
+	require.Equal(t, first, second)
+}
+
+func TestAllocateMeshIP_SkipsTakenAddresses(t *testing.T) {
+	s := openTestStore(t)
+	for _, id := range []string{"device-a", "device-b", "device-c"} {
+		require.NoError(t, s.AddPendingDevice(id, id+"-tok"))
+		require.NoError(t, s.CompleteEnrollment(id, "cert-pem", id+"-serial"))
+	}
+
+	a, err := s.AllocateMeshIP("device-a")
+	require.NoError(t, err)
+	b, err := s.AllocateMeshIP("device-b")
+	require.NoError(t, err)
+	c, err := s.AllocateMeshIP("device-c")
+	require.NoError(t, err)
+
+	require.Equal(t, "100.64.0.1", a)
+	require.Equal(t, "100.64.0.2", b)
+	require.Equal(t, "100.64.0.3", c)
+}

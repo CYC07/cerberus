@@ -7,6 +7,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/netip"
 )
@@ -96,4 +97,80 @@ func checkAffected(res sql.Result) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// AllocateMeshIP returns deviceID's persistent mesh IP, allocating one if
+// it doesn't already have one. Idempotent: a second call for the same
+// device returns the same IP rather than allocating a new one. Allocation
+// picks the lowest unused host address in 100.64.0.0/10 (CGNAT range,
+// Tailscale convention), starting at 100.64.0.1 — 100.64.0.0 is the
+// network address and is never allocated.
+func (s *Store) AllocateMeshIP(deviceID string) (string, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var existing sql.NullString
+	err = tx.QueryRow(`SELECT mesh_ip FROM devices WHERE device_id = ?`, deviceID).Scan(&existing)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if existing.Valid && existing.String != "" {
+		return existing.String, nil
+	}
+
+	rows, err := tx.Query(`SELECT mesh_ip FROM devices WHERE mesh_ip IS NOT NULL`)
+	if err != nil {
+		return "", err
+	}
+	used := map[netip.Addr]bool{}
+	for rows.Next() {
+		var ipStr string
+		if err := rows.Scan(&ipStr); err != nil {
+			rows.Close()
+			return "", err
+		}
+		if addr, err := netip.ParseAddr(ipStr); err == nil {
+			used[addr] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return "", err
+	}
+	rows.Close()
+
+	next, err := nextFreeMeshIP(used)
+	if err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(`UPDATE devices SET mesh_ip = ? WHERE device_id = ?`, next, deviceID); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return next, nil
+}
+
+// nextFreeMeshIP picks the lowest address in meshPrefix not present in
+// used.
+func nextFreeMeshIP(used map[netip.Addr]bool) (string, error) {
+	base := meshPrefix.Addr().As4()
+	start := uint32(base[0])<<24 | uint32(base[1])<<16 | uint32(base[2])<<8 | uint32(base[3])
+	const hostBits = 32 - 10 // /10 prefix
+	const maxHosts = 1 << hostBits
+	for offset := uint32(1); offset < maxHosts; offset++ {
+		n := start + offset
+		addr := netip.AddrFrom4([4]byte{byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)})
+		if !used[addr] {
+			return addr.String(), nil
+		}
+	}
+	return "", errors.New("store: mesh IP pool exhausted")
 }
