@@ -22,6 +22,7 @@ import (
 	"github.com/CYC07/cerberus/internal/authjwt"
 	"github.com/CYC07/cerberus/internal/ca"
 	"github.com/CYC07/cerberus/internal/ctrlserver"
+	"github.com/CYC07/cerberus/internal/mesh"
 	"github.com/CYC07/cerberus/internal/store"
 	"github.com/CYC07/cerberus/internal/ztnatest"
 )
@@ -301,4 +302,66 @@ func TestEnroll_RejectsInvalidCSRSignature(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestEnroll_WithWGPubkeyAllocatesMeshIP(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	require.NoError(t, srv.Store.AddPendingDevice("device-a", "tok-123"))
+	_, csrPEM := generateCSR(t)
+	kp, err := mesh.GenerateKeyPair()
+	require.NoError(t, err)
+
+	body, _ := json.Marshal(map[string]string{"token": "tok-123", "csr_pem": csrPEM, "wg_pubkey": kp.Public.String()})
+	resp, err := httpsClient(nil).Post(ts.URL+"/enroll", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var out struct {
+		CertPEM string `json:"cert_pem"`
+		MeshIP  string `json:"mesh_ip"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.NotEmpty(t, out.CertPEM)
+	require.NotEmpty(t, out.MeshIP)
+}
+
+func TestEnroll_WithoutWGPubkeyLeavesMeshEmpty(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	require.NoError(t, srv.Store.AddPendingDevice("device-a", "tok-123"))
+	_, csrPEM := generateCSR(t)
+	body, _ := json.Marshal(map[string]string{"token": "tok-123", "csr_pem": csrPEM})
+	resp, err := httpsClient(nil).Post(ts.URL+"/enroll", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var out struct {
+		MeshIP string `json:"mesh_ip"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Empty(t, out.MeshIP)
+}
+
+func TestEnroll_RejectsInvalidWGPubkeyBeforeConsumingToken(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	require.NoError(t, srv.Store.AddPendingDevice("device-a", "tok-123"))
+	_, csrPEM := generateCSR(t)
+	body, _ := json.Marshal(map[string]string{"token": "tok-123", "csr_pem": csrPEM, "wg_pubkey": "not-a-valid-key"})
+	resp, err := httpsClient(nil).Post(ts.URL+"/enroll", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	// The failed attempt must not have consumed the token — proves
+	// validation happens before ConsumeEnrollmentToken, not after.
+	deviceID, err := srv.Store.ConsumeEnrollmentToken("tok-123")
+	require.NoError(t, err)
+	require.Equal(t, "device-a", deviceID)
 }

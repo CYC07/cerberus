@@ -8,8 +8,11 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"log"
 	"net/http"
 	"time"
+
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/CYC07/cerberus/internal/authjwt"
 	"github.com/CYC07/cerberus/internal/ca"
@@ -38,14 +41,30 @@ func (s *Server) Handler() http.Handler {
 // enrollment token. The device's identity (deviceID) comes from the token
 // lookup, never from the CSR's own subject field, so a client can't
 // self-assert an identity it wasn't issued.
+//
+// An optional wg_pubkey registers the device for the WireGuard mesh in
+// the same call — validated before the enrollment token is consumed or
+// any store state changes, because ConsumeEnrollmentToken requires
+// cert_pem IS NULL and can't be retried once CompleteEnrollment has run;
+// a malformed key must fail without burning the one-time token. Once the
+// cert is issued (the primary, already-committed operation), a mesh IP
+// allocation failure does not fail the whole enroll — it's logged
+// server-side and the response simply omits mesh_ip.
 func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Token string `json:"token"`
-		CSR   string `json:"csr_pem"`
+		Token    string `json:"token"`
+		CSR      string `json:"csr_pem"`
+		WGPubkey string `json:"wg_pubkey,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
+	}
+	if req.WGPubkey != "" {
+		if _, err := wgtypes.ParseKey(req.WGPubkey); err != nil {
+			http.Error(w, "invalid wg_pubkey", http.StatusBadRequest)
+			return
+		}
 	}
 	deviceID, err := s.Store.ConsumeEnrollmentToken(req.Token)
 	if err != nil {
@@ -77,12 +96,26 @@ func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "enrollment failed", http.StatusInternalServerError)
 		return
 	}
+
+	var meshIP string
+	if req.WGPubkey != "" {
+		if err := s.Store.SetMeshPubkey(deviceID, req.WGPubkey); err != nil {
+			log.Printf("enroll %s: set mesh pubkey: %v", deviceID, err)
+		} else if ip, err := s.Store.AllocateMeshIP(deviceID); err != nil {
+			log.Printf("enroll %s: allocate mesh ip: %v", deviceID, err)
+		} else {
+			meshIP = ip
+		}
+	}
+
 	json.NewEncoder(w).Encode(struct {
 		CertPEM string `json:"cert_pem"`
 		CAPEM   string `json:"ca_pem"`
+		MeshIP  string `json:"mesh_ip,omitempty"`
 	}{
 		CertPEM: string(certPEM),
 		CAPEM:   string(ca.EncodeCertPEM(s.RootCA.Cert)),
+		MeshIP:  meshIP,
 	})
 }
 
