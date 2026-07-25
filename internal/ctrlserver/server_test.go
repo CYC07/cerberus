@@ -365,3 +365,131 @@ func TestEnroll_RejectsInvalidWGPubkeyBeforeConsumingToken(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "device-a", deviceID)
 }
+
+func registerMeshDevice(t *testing.T, srv *ctrlserver.Server, root *ca.RootCA, deviceID string) (*ecdsa.PrivateKey, *x509.Certificate) {
+	t.Helper()
+	key, cert := ztnatest.IssueDeviceCert(t, root, deviceID)
+	require.NoError(t, srv.Store.AddPendingDevice(deviceID, deviceID+"-tok"))
+	require.NoError(t, srv.Store.CompleteEnrollment(deviceID, string(ca.EncodeCertPEM(cert)), cert.SerialNumber.String()))
+	kp, err := mesh.GenerateKeyPair()
+	require.NoError(t, err)
+	require.NoError(t, srv.Store.SetMeshPubkey(deviceID, kp.Public.String()))
+	_, err = srv.Store.AllocateMeshIP(deviceID)
+	require.NoError(t, err)
+	return key, cert
+}
+
+func TestMesh_RejectsMissingClientCert(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+	resp, err := httpsClient(nil).Post(ts.URL+"/mesh", "application/json", nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestMesh_RejectsRevokedDevice(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+	key, cert := registerMeshDevice(t, srv, root, "device-a")
+	require.NoError(t, srv.Store.RevokeDevice("device-a"))
+
+	tlsCert := ztnatest.TLSCertificate(t, cert, key)
+	resp, err := httpsClient(&tlsCert).Post(ts.URL+"/mesh", "application/json", nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestMesh_RejectsStaleCertSerial(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	key, cert := ztnatest.IssueDeviceCert(t, root, "device-a")
+	require.NoError(t, srv.Store.AddPendingDevice("device-a", "tok-123"))
+	require.NoError(t, srv.Store.CompleteEnrollment("device-a", string(ca.EncodeCertPEM(cert)), "different-serial"))
+
+	tlsCert := ztnatest.TLSCertificate(t, cert, key)
+	resp, err := httpsClient(&tlsCert).Post(ts.URL+"/mesh", "application/json", nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestMesh_NoMeshRegistrationReturnsEmptyNetmap(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	key, cert := ztnatest.IssueDeviceCert(t, root, "device-a")
+	require.NoError(t, srv.Store.AddPendingDevice("device-a", "tok-123"))
+	require.NoError(t, srv.Store.CompleteEnrollment("device-a", string(ca.EncodeCertPEM(cert)), cert.SerialNumber.String()))
+
+	tlsCert := ztnatest.TLSCertificate(t, cert, key)
+	resp, err := httpsClient(&tlsCert).Post(ts.URL+"/mesh", "application/json", nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var nm mesh.Netmap
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&nm))
+	require.Empty(t, nm.Self.DeviceID)
+	require.Empty(t, nm.Peers)
+}
+
+func TestMesh_ReturnsAuthorizedPeer(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	keyA, certA := registerMeshDevice(t, srv, root, "device-a")
+	registerMeshDevice(t, srv, root, "device-b")
+	require.NoError(t, srv.Store.AddPolicy("device-a", "mesh:device-b", "allow"))
+
+	tlsCert := ztnatest.TLSCertificate(t, certA, keyA)
+	resp, err := httpsClient(&tlsCert).Post(ts.URL+"/mesh", "application/json", nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var nm mesh.Netmap
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&nm))
+	require.Equal(t, "device-a", nm.Self.DeviceID)
+	require.Len(t, nm.Peers, 1)
+	require.Equal(t, "device-b", nm.Peers[0].DeviceID)
+}
+
+func TestMesh_EndpointReportPersistsForPeer(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	keyA, certA := registerMeshDevice(t, srv, root, "device-a")
+	keyB, certB := registerMeshDevice(t, srv, root, "device-b")
+	require.NoError(t, srv.Store.AddPolicy("device-a", "mesh:device-b", "allow"))
+
+	tlsCertB := ztnatest.TLSCertificate(t, certB, keyB)
+	body, _ := json.Marshal(map[string]string{"endpoint": "1.2.3.4:51820"})
+	resp, err := httpsClient(&tlsCertB).Post(ts.URL+"/mesh", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	tlsCertA := ztnatest.TLSCertificate(t, certA, keyA)
+	resp2, err := httpsClient(&tlsCertA).Post(ts.URL+"/mesh", "application/json", nil)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+	var nm mesh.Netmap
+	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&nm))
+	require.Len(t, nm.Peers, 1)
+	require.Equal(t, "1.2.3.4:51820", nm.Peers[0].Endpoint)
+}
+
+func TestMesh_RejectsMalformedBody(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+	key, cert := registerMeshDevice(t, srv, root, "device-a")
+
+	tlsCert := ztnatest.TLSCertificate(t, cert, key)
+	resp, err := httpsClient(&tlsCert).Post(ts.URL+"/mesh", "application/json", bytes.NewReader([]byte("not json")))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
