@@ -174,3 +174,28 @@ func nextFreeMeshIP(used map[netip.Addr]bool) (string, error) {
 	}
 	return "", errors.New("store: mesh IP pool exhausted")
 }
+
+// ListMeshDevices returns every device that has completed mesh
+// registration — has both a WireGuard public key and an allocated mesh
+// IP. Revoked devices are included; callers (internal/mesh.BuildNetmap)
+// filter them out explicitly.
+func (s *Store) ListMeshDevices() ([]MeshDevice, error) {
+	rows, err := s.db.Query(`SELECT device_id, wg_pubkey, mesh_ip, mesh_endpoint, revoked FROM devices WHERE wg_pubkey IS NOT NULL AND mesh_ip IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MeshDevice
+	for rows.Next() {
+		var d MeshDevice
+		var endpoint sql.NullString
+		var revoked int
+		if err := rows.Scan(&d.DeviceID, &d.WGPubkey, &d.MeshIP, &endpoint, &revoked); err != nil {
+			return nil, err
+		}
+		d.MeshEndpoint = endpoint.String
+		d.Revoked = revoked != 0
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
