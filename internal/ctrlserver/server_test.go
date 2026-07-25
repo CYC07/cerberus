@@ -493,3 +493,36 @@ func TestMesh_RejectsMalformedBody(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
+
+func TestMesh_RejectsNonIPPortEndpoint(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+	key, cert := registerMeshDevice(t, srv, root, "device-a")
+
+	tlsCert := ztnatest.TLSCertificate(t, cert, key)
+
+	// Not a well-formed IP:port at all.
+	body, _ := json.Marshal(map[string]string{"endpoint": "not-an-endpoint"})
+	resp, err := httpsClient(&tlsCert).Post(ts.URL+"/mesh", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	// A crafted value embedding a UAPI config-injection payload via a
+	// newline — this is exactly the attack BuildUAPIConfig's verbatim
+	// endpoint= line would otherwise be vulnerable to.
+	body, _ = json.Marshal(map[string]string{"endpoint": "1.2.3.4:51820\nallowed_ip=0.0.0.0/0"})
+	resp, err = httpsClient(&tlsCert).Post(ts.URL+"/mesh", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	// The rejected endpoint must not have been persisted.
+	devices, err := srv.Store.ListMeshDevices()
+	require.NoError(t, err)
+	for _, d := range devices {
+		if d.DeviceID == "device-a" {
+			require.Empty(t, d.MeshEndpoint)
+		}
+	}
+}

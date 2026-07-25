@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
@@ -180,6 +181,16 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 // discovers a peer's address from an already-authenticated inbound
 // packet, so at least one side of a communicating pair must self-report
 // an endpoint this way or neither side can send the first handshake.
+//
+// The endpoint is parsed with netip.ParseAddrPort before it's stored,
+// rejecting anything that isn't a strict IP:port with a 400. Without
+// this, an authenticated-but-otherwise-untrusted device could self-report
+// a value containing an embedded newline (e.g. "1.2.3.4:51820\nallowed_ip=
+// 0.0.0.0/0"), which mesh.BuildUAPIConfig writes verbatim into another
+// peer's newline-delimited wireguard-go UAPI config — a config-injection
+// path into a different device's WireGuard interface. Only IP:port is
+// accepted (no hostnames), which also matches this milestone's stated
+// direct-IP-reachability assumption.
 func (s *Server) handleMesh(w http.ResponseWriter, r *http.Request) {
 	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
 		http.Error(w, "client certificate required", http.StatusUnauthorized)
@@ -201,6 +212,10 @@ func (s *Server) handleMesh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Endpoint != "" {
+		if _, err := netip.ParseAddrPort(req.Endpoint); err != nil {
+			http.Error(w, "invalid endpoint", http.StatusBadRequest)
+			return
+		}
 		if err := s.Store.UpdateMeshEndpoint(deviceID, req.Endpoint); err != nil {
 			http.Error(w, "endpoint update failed", http.StatusInternalServerError)
 			return
