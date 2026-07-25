@@ -3,6 +3,7 @@
 // rather than in internal/mesh because uniqueness is a store-owned
 // invariant, and internal/mesh already imports internal/store for
 // MeshDevice — the reverse import would cycle.
+
 package store
 
 import (
@@ -44,7 +45,19 @@ func migrateMeshColumns(db *sql.DB) error {
 			return fmt.Errorf("store: migrate %s: %w", c.name, err)
 		}
 	}
-	_, err = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mesh_ip ON devices(mesh_ip) WHERE mesh_ip IS NOT NULL`)
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mesh_ip ON devices(mesh_ip) WHERE mesh_ip IS NOT NULL`); err != nil {
+		return err
+	}
+	// Two devices must never share a WireGuard public key — pubkeys aren't
+	// secret (every netmap hands them to authorized peers), so nothing
+	// else stops a rogue enrolled device from claiming another device's
+	// key and hijacking its mesh traffic once wireguard-go merges the two
+	// peer configs. Callers must store the canonical, re-encoded form of
+	// the key (see handleEnroll), not the raw client-submitted string —
+	// base64.StdEncoding tolerates embedded whitespace and still decodes
+	// to the same key, which would otherwise let the same key be recorded
+	// under many distinct strings and defeat this index.
+	_, err = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_wg_pubkey ON devices(wg_pubkey) WHERE wg_pubkey IS NOT NULL`)
 	return err
 }
 

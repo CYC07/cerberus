@@ -54,6 +54,21 @@ func TestSetMeshPubkeyThenUpdateMeshEndpoint_Roundtrip(t *testing.T) {
 	// only proves both calls succeed against a real column set.
 }
 
+func TestSetMeshPubkey_RejectsDuplicateAcrossDevices(t *testing.T) {
+	s := openTestStore(t)
+	require.NoError(t, s.AddPendingDevice("device-a", "tok-a"))
+	require.NoError(t, s.CompleteEnrollment("device-a", "cert-pem", "serial-a"))
+	require.NoError(t, s.AddPendingDevice("device-b", "tok-b"))
+	require.NoError(t, s.CompleteEnrollment("device-b", "cert-pem", "serial-b"))
+
+	require.NoError(t, s.SetMeshPubkey("device-a", "same-pubkey"))
+	// A second device claiming the exact same key must be rejected by the
+	// UNIQUE index — pubkeys aren't secret, so nothing else stops one
+	// enrolled device from claiming another's identity.
+	err := s.SetMeshPubkey("device-b", "same-pubkey")
+	require.Error(t, err)
+}
+
 func TestAllocateMeshIP_UnknownDeviceFails(t *testing.T) {
 	s := openTestStore(t)
 	_, err := s.AllocateMeshIP("no-such-device")

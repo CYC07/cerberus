@@ -105,14 +105,7 @@ func (s *Store) CompleteEnrollment(deviceID, certPEM, certSerial string) error {
 	if err != nil {
 		return err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return checkAffected(res)
 }
 
 // GetDeviceByID returns the device record for deviceID.
@@ -142,14 +135,7 @@ func (s *Store) RevokeDevice(deviceID string) error {
 	if err != nil {
 		return err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return checkAffected(res)
 }
 
 // AddPolicy inserts or updates (subject, resource) -> action.

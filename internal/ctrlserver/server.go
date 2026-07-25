@@ -66,11 +66,19 @@ func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	var wgPubkey string
 	if req.WGPubkey != "" {
-		if _, err := wgtypes.ParseKey(req.WGPubkey); err != nil {
+		key, err := wgtypes.ParseKey(req.WGPubkey)
+		if err != nil {
 			http.Error(w, "invalid wg_pubkey", http.StatusBadRequest)
 			return
 		}
+		// Store key.String(), not req.WGPubkey: base64.StdEncoding tolerates
+		// embedded whitespace (e.g. a stray '\n') and still decodes to the
+		// same 32 bytes, so the same key could otherwise be recorded under
+		// many distinct strings — defeating the UNIQUE index below and any
+		// other string-equality comparison on this column.
+		wgPubkey = key.String()
 	}
 	deviceID, err := s.Store.ConsumeEnrollmentToken(req.Token)
 	if err != nil {
@@ -104,8 +112,8 @@ func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var meshIP string
-	if req.WGPubkey != "" {
-		if err := s.Store.SetMeshPubkey(deviceID, req.WGPubkey); err != nil {
+	if wgPubkey != "" {
+		if err := s.Store.SetMeshPubkey(deviceID, wgPubkey); err != nil {
 			log.Printf("enroll %s: set mesh pubkey: %v", deviceID, err)
 		} else if ip, err := s.Store.AllocateMeshIP(deviceID); err != nil {
 			log.Printf("enroll %s: allocate mesh ip: %v", deviceID, err)

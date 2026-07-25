@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/CYC07/cerberus/internal/authjwt"
 	"github.com/CYC07/cerberus/internal/ca"
@@ -328,6 +329,85 @@ func TestEnroll_WithWGPubkeyAllocatesMeshIP(t *testing.T) {
 	require.NotEmpty(t, out.MeshIP)
 }
 
+func TestEnroll_RejectsDuplicateWGPubkeyAcrossDevices(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	kp, err := mesh.GenerateKeyPair()
+	require.NoError(t, err)
+
+	// device-a enrolls with kp's public key and gets a mesh IP.
+	require.NoError(t, srv.Store.AddPendingDevice("device-a", "tok-a"))
+	_, csrA := generateCSR(t)
+	bodyA, _ := json.Marshal(map[string]string{"token": "tok-a", "csr_pem": csrA, "wg_pubkey": kp.Public.String()})
+	respA, err := httpsClient(nil).Post(ts.URL+"/enroll", "application/json", bytes.NewReader(bodyA))
+	require.NoError(t, err)
+	respA.Body.Close()
+	require.Equal(t, http.StatusOK, respA.StatusCode)
+
+	// device-b enrolls claiming the exact same public key. Cert issuance
+	// must still succeed (it's the primary, already-committed operation),
+	// but mesh_ip must stay empty — the UNIQUE index on wg_pubkey rejects
+	// the duplicate, and SetMeshPubkey's failure is logged, not fatal.
+	require.NoError(t, srv.Store.AddPendingDevice("device-b", "tok-b"))
+	_, csrB := generateCSR(t)
+	bodyB, _ := json.Marshal(map[string]string{"token": "tok-b", "csr_pem": csrB, "wg_pubkey": kp.Public.String()})
+	respB, err := httpsClient(nil).Post(ts.URL+"/enroll", "application/json", bytes.NewReader(bodyB))
+	require.NoError(t, err)
+	defer respB.Body.Close()
+	require.Equal(t, http.StatusOK, respB.StatusCode)
+
+	var outB struct {
+		CertPEM string `json:"cert_pem"`
+		MeshIP  string `json:"mesh_ip"`
+	}
+	require.NoError(t, json.NewDecoder(respB.Body).Decode(&outB))
+	require.NotEmpty(t, outB.CertPEM)
+	require.Empty(t, outB.MeshIP)
+}
+
+func TestEnroll_CanonicalizesWGPubkeyBeforeUniquenessCheck(t *testing.T) {
+	srv, root := newTestServer(t)
+	ts := startTestHTTPS(t, srv, root)
+
+	kp, err := mesh.GenerateKeyPair()
+	require.NoError(t, err)
+	canonical := kp.Public.String()
+
+	// A whitespace-mutated encoding of the exact same key: base64's
+	// standard decoder tolerates an embedded newline and still decodes to
+	// the identical 32 bytes, so this string is a different literal but
+	// the same WireGuard public key. If handleEnroll stored the raw
+	// client-submitted string instead of the canonical re-encoded form,
+	// this would slip past the UNIQUE index entirely.
+	mutated := canonical[:10] + "\n" + canonical[10:]
+	mutatedKey, err := wgtypes.ParseKey(mutated)
+	require.NoError(t, err, "mutated key must still parse")
+	require.Equal(t, kp.Public, mutatedKey, "mutated key must decode to the same key for this test to be meaningful")
+
+	require.NoError(t, srv.Store.AddPendingDevice("device-a", "tok-a"))
+	_, csrA := generateCSR(t)
+	bodyA, _ := json.Marshal(map[string]string{"token": "tok-a", "csr_pem": csrA, "wg_pubkey": canonical})
+	respA, err := httpsClient(nil).Post(ts.URL+"/enroll", "application/json", bytes.NewReader(bodyA))
+	require.NoError(t, err)
+	respA.Body.Close()
+	require.Equal(t, http.StatusOK, respA.StatusCode)
+
+	require.NoError(t, srv.Store.AddPendingDevice("device-b", "tok-b"))
+	_, csrB := generateCSR(t)
+	bodyB, _ := json.Marshal(map[string]string{"token": "tok-b", "csr_pem": csrB, "wg_pubkey": mutated})
+	respB, err := httpsClient(nil).Post(ts.URL+"/enroll", "application/json", bytes.NewReader(bodyB))
+	require.NoError(t, err)
+	defer respB.Body.Close()
+	require.Equal(t, http.StatusOK, respB.StatusCode)
+
+	var outB struct {
+		MeshIP string `json:"mesh_ip"`
+	}
+	require.NoError(t, json.NewDecoder(respB.Body).Decode(&outB))
+	require.Empty(t, outB.MeshIP, "mutated-but-equivalent key must still be caught as a duplicate")
+}
+
 func TestEnroll_WithoutWGPubkeyLeavesMeshEmpty(t *testing.T) {
 	srv, root := newTestServer(t)
 	ts := startTestHTTPS(t, srv, root)
@@ -520,9 +600,12 @@ func TestMesh_RejectsNonIPPortEndpoint(t *testing.T) {
 	// The rejected endpoint must not have been persisted.
 	devices, err := srv.Store.ListMeshDevices()
 	require.NoError(t, err)
+	found := false
 	for _, d := range devices {
 		if d.DeviceID == "device-a" {
+			found = true
 			require.Empty(t, d.MeshEndpoint)
 		}
 	}
+	require.True(t, found, "device-a must be present in ListMeshDevices for this assertion to be meaningful")
 }
