@@ -7,14 +7,8 @@ connection to a protected resource is authenticated (mutual TLS + a
 short-lived, cert-bound JWT) and authorized (explicit allow-list policy,
 default-deny) before a single byte is proxied.
 
-## Why
-
-Portfolio project demonstrating the core ideas behind real ZTNA products
-(OpenZiti, Teleport, Boundary, Tailscale) from first principles: your own
-CA, your own token issuance, your own policy engine, your own enforcement
-gateway. See [`docs/superpowers/specs/2026-07-24-ztna-core-design.md`](docs/superpowers/specs/2026-07-24-ztna-core-design.md)
-for the full design rationale and [`docs/superpowers/plans/2026-07-24-ztna-milestone1.md`](docs/superpowers/plans/2026-07-24-ztna-milestone1.md)
-for the implementation plan.
+Own CA, own token issuance, own policy engine, own enforcement gateway —
+no third-party identity provider, no cloud control plane.
 
 ## Architecture
 
@@ -50,10 +44,30 @@ makes cert+JWT a real two-factor scheme instead of a bearer token with
 extra steps — see `TestE2E_JWTFromDifferentCertRejected` in
 [`test/integration/e2e_test.go`](test/integration/e2e_test.go).
 
-## Scope (Milestone 1)
+## WireGuard mesh (control plane only, in progress)
 
-Implemented: identity (mTLS + cert-bound JWT), policy engine, gateway
-enforcement, raw-TCP (SSH) resource type, PC-to-PC.
+Alongside the broker above, enrolled devices are being given an optional
+opt-in WireGuard full L3 mesh — any two mesh devices reaching each other
+directly, Tailscale-style, instead of proxying through `cerberus-gw`. A
+second, independent data plane: the broker keeps working exactly as
+described above whether or not the mesh is used.
+
+`cerberus-ctrl` already has the server side of this: every enrolled
+device gets a WireGuard identity and a mesh IP from `100.64.0.0/10`
+(CGNAT range) at enroll time, and a `/mesh` endpoint serves each device
+its authorized peer set, computed from the same default-deny policy
+engine the broker uses (`mesh:<device>` resources). None of that grants
+reachability by itself — mesh access still requires an explicit policy
+grant, same as the broker.
+
+**Not yet built:** the client-side agent (`cerberusctl mesh up`) that
+would actually bring up a WireGuard interface and talk to `/mesh`. Until
+that lands, the mesh control plane exists but nothing consumes it.
+
+## Scope
+
+Working end to end: identity (mTLS + cert-bound JWT), policy engine,
+gateway enforcement, raw-TCP (SSH) resource type, PC-to-PC.
 
 Deliberately out of scope for now: phone/mobile clients, device posture
 checks, audit logging beyond server-side deny logs, HTTP/web resource
@@ -171,6 +185,10 @@ connect flow end to end, including the critical cert/JWT-binding test.
 - All private key material is written `0600`; public certs `0644`.
 - The gateway and control-plane HTTP listeners both enforce read/write
   timeouts to resist slow-connection resource exhaustion.
+- WireGuard public keys and mesh IPs are each unique per device (enforced
+  at the database level), and a self-reported WireGuard endpoint is
+  validated as a strict `IP:port` before it's persisted or handed to
+  another device.
 
 ## License
 
