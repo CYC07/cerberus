@@ -1,6 +1,6 @@
-// Package store: mesh-related schema and methods, kept in their own file
-// per the project's many-small-files convention. Mesh IP allocation lives
-// here rather than in internal/mesh because uniqueness is a store-owned
+// Mesh-related schema and methods, kept in their own file per the
+// project's many-small-files convention. Mesh IP allocation lives here
+// rather than in internal/mesh because uniqueness is a store-owned
 // invariant, and internal/mesh already imports internal/store for
 // MeshDevice — the reverse import would cycle.
 package store
