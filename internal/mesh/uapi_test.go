@@ -29,6 +29,8 @@ func TestBuildUAPIConfig_OmitsEmptyEndpoint(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, cfg, "endpoint=")
 	require.Contains(t, cfg, "allowed_ip=100.64.0.2/32\n")
+	require.Contains(t, cfg, "public_key="+hex.EncodeToString(peerKP.Public[:])+"\n")
+	require.NotContains(t, cfg, peerKP.Public.String()) // base64 form must never appear
 }
 
 func TestBuildUAPIConfig_IncludesNonEmptyEndpoint(t *testing.T) {
