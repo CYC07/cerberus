@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/CYC07/cerberus/internal/mesh"
@@ -81,6 +82,7 @@ func cmdMeshUp(stateDir, ctrlAddr, advertiseEndpoint string) error {
 		return fmt.Errorf("apply initial netmap: %w", err)
 	}
 	fmt.Printf("mesh up: %s = %s, %d peer(s)\n", meshIfaceName, nm.Self.MeshIP, len(nm.Peers))
+	lastPeers := nm.Peers
 
 	for {
 		time.Sleep(30 * time.Second)
@@ -89,9 +91,19 @@ func cmdMeshUp(stateDir, ctrlAddr, advertiseEndpoint string) error {
 			fmt.Fprintln(os.Stderr, "mesh poll:", err)
 			continue
 		}
+		// Skip the IpcSet entirely when the peer set hasn't changed —
+		// BuildUAPIConfig's replace_peers=true tears down and rehandshakes
+		// every peer on each call, so applying an unchanged netmap every
+		// 30s forever would cause a periodic connectivity blip on an
+		// otherwise-idle mesh for no reason.
+		if slices.Equal(next.Peers, lastPeers) {
+			continue
+		}
 		if err := dev.ApplyNetmap(privKey, meshListenPort, next.Peers); err != nil {
 			fmt.Fprintln(os.Stderr, "mesh apply:", err)
+			continue
 		}
+		lastPeers = next.Peers
 	}
 }
 
