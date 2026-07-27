@@ -27,7 +27,7 @@ Three binaries, split control plane / data plane — three heads, one system:
   real reason is logged server-side only.
 - **`cerberusctl`** — the client CLI. `enroll` (get a cert), `login` (get
   a token), `connect` (open an authorized tunnel — usable as an SSH
-  `ProxyCommand`).
+  `ProxyCommand`), `mesh up` (bring up the WireGuard mesh interface).
 
 ```
 cerberusctl  --mTLS-->  cerberus-gw  --mTLS-->  cerberus-ctrl   (policy sync, every 30s)
@@ -44,39 +44,80 @@ makes cert+JWT a real two-factor scheme instead of a bearer token with
 extra steps — see `TestE2E_JWTFromDifferentCertRejected` in
 [`test/integration/e2e_test.go`](test/integration/e2e_test.go).
 
-## WireGuard mesh (control plane only, in progress)
+## WireGuard mesh
 
-Alongside the broker above, enrolled devices are being given an optional
-opt-in WireGuard full L3 mesh — any two mesh devices reaching each other
-directly, Tailscale-style, instead of proxying through `cerberus-gw`. A
+Alongside the broker above, enrolled devices can opt into a WireGuard
+full L3 mesh — any two mesh devices reaching each other directly,
+Tailscale-style, instead of proxying through `cerberus-gw`. This is a
 second, independent data plane: the broker keeps working exactly as
 described above whether or not the mesh is used.
 
-`cerberus-ctrl` already has the server side of this: every enrolled
-device gets a WireGuard identity and a mesh IP from `100.64.0.0/10`
-(CGNAT range) at enroll time, and a `/mesh` endpoint serves each device
-its authorized peer set, computed from the same default-deny policy
-engine the broker uses (`mesh:<device>` resources). None of that grants
-reachability by itself — mesh access still requires an explicit policy
-grant, same as the broker.
+`cerberus-ctrl` has the server side of this: every enrolled device gets
+a WireGuard identity and a mesh IP from `100.64.0.0/10` (CGNAT range) at
+enroll time (`cerberusctl enroll` generates and registers the keypair
+automatically — no extra step needed). A `/mesh` endpoint serves each
+device its authorized peer set, computed from the same default-deny
+policy engine the broker uses (`mesh:<device>` resources). None of that
+grants reachability by itself — mesh access still requires an explicit
+policy grant, same as the broker:
 
-**Not yet built:** the client-side agent (`cerberusctl mesh up`) that
-would actually bring up a WireGuard interface and talk to `/mesh`. Until
-that lands, the mesh control plane exists but nothing consumes it.
+```bash
+./bin/cerberus-ctrl admin policy add my-pc mesh:other-pc allow
+```
+
+**That single, directional grant makes the mesh path mutual.** WireGuard
+requires both ends of a tunnel to configure each other as a peer before
+a handshake can complete — that's a property of the WireGuard protocol
+itself, not a design choice this project made lightly. So the grant
+above makes `other-pc` reachable from `my-pc` *and* makes `my-pc`
+reachable from `other-pc`. Fine-grained, one-directional enforcement
+still lives entirely in `cerberus-gw`'s broker path — mesh only ever
+grants device-level L3 reachability, never per-resource control.
+
+The client side is `cerberusctl mesh up`, which brings up a real kernel
+WireGuard interface (`cerberus0`, always listening on UDP `51820`) and
+keeps it synced with `/mesh` — polling every 30s, re-applying only when
+the peer set actually changed. Like `cerberus-ctrl serve` and
+`cerberus-gw` above, it's a long-running process that never returns on
+its own, so run it the same way, with `&` (or a supervisor):
+
+```bash
+sudo CERBERUS_STATE_DIR=./cerberusctl-state \
+  ./bin/cerberusctl mesh up 127.0.0.1:8443 203.0.113.10:51820 &
+```
+
+**This requires root.** Unlike every other `cerberusctl` command, `mesh
+up` creates a real kernel TUN interface, which needs `CAP_NET_ADMIN`.
+Pass `CERBERUS_STATE_DIR` on the `sudo` command line itself (as above),
+not via a prior `export` — `sudo` does not forward your shell's
+environment by default, and root needs to read the same enrolled
+state — device cert, CA, and WireGuard key — that `cerberusctl enroll`
+wrote as your normal user.
+
+`advertise_endpoint` is optional, but at least one device in a pair
+needs to report one: WireGuard can only learn a peer's address from a
+packet it has already received, it can never bootstrap a connection to
+an address nobody advertised. There's no NAT traversal, no DERP, no
+STUN in this feature — both devices need to be directly reachable at
+the `IP:port` (UDP `51820`) they advertise.
 
 ## Scope
 
 Working end to end: identity (mTLS + cert-bound JWT), policy engine,
-gateway enforcement, raw-TCP (SSH) resource type, PC-to-PC.
+gateway enforcement, raw-TCP (SSH) resource type, PC-to-PC, and the
+opt-in WireGuard mesh (`cerberusctl mesh up`) described above.
 
 Deliberately out of scope for now: phone/mobile clients, device posture
 checks, audit logging beyond server-side deny logs, HTTP/web resource
-proxying, continuous re-verification mid-session.
+proxying, continuous re-verification mid-session, and — specific to the
+mesh — NAT traversal, DERP-style relaying, or STUN; both mesh peers must
+be directly reachable at the address they advertise.
 
 ## Requirements
 
 - Go 1.22+
 - A backend service to protect (defaults to local `sshd` on port 22)
+- Root / `CAP_NET_ADMIN`, only if using `cerberusctl mesh up` — everything else runs unprivileged
 
 No external services, no cloud dependency — everything here is
 self-hosted and runs on one machine.
