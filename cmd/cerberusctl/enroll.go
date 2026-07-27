@@ -86,11 +86,22 @@ func cmdEnroll(stateDir, ctrlAddr, caCertPath, token string) error {
 	if err := os.WriteFile(filepath.Join(stateDir, "device.crt"), []byte(out.CertPEM), 0600); err != nil {
 		return err
 	}
+	// ca.crt (the core mTLS identity) is written before mesh.key
+	// deliberately: the enrollment token is already consumed server-side
+	// at this point and can never be retried, so if a later write fails,
+	// the device should still end up with a fully working mTLS identity
+	// (login/connect) rather than none at all. A failed mesh.key write
+	// leaves the device without mesh capability — recoverable only via
+	// revoke + re-enroll, same as any wg_pubkey collision — but not
+	// without login/connect too.
+	if err := os.WriteFile(filepath.Join(stateDir, "ca.crt"), []byte(out.CAPEM), 0644); err != nil {
+		return err
+	}
 	if err := os.WriteFile(filepath.Join(stateDir, "mesh.key"), []byte(wgKeys.Private.String()), 0600); err != nil {
 		return fmt.Errorf("write mesh key: %w", err)
 	}
 	if out.MeshIP != "" {
 		fmt.Printf("mesh registered: %s\n", out.MeshIP)
 	}
-	return os.WriteFile(filepath.Join(stateDir, "ca.crt"), []byte(out.CAPEM), 0644)
+	return nil
 }

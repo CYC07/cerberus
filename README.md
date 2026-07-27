@@ -210,12 +210,19 @@ rejection — check `cerberus-gw`'s log output for the real reason.
 
 ```bash
 go test ./...            # full suite
-go test ./... -cover     # with coverage (all logic packages ≥80%)
+go test ./... -cover     # with coverage (all logic packages ≥80%, see note below)
 go test ./... -race      # concurrency-sensitive packages (gwserver, gwproxy)
 ```
 
 `test/integration/e2e_test.go` drives the real HTTP+TLS enroll → login →
 connect flow end to end, including the critical cert/JWT-binding test.
+
+`internal/mesh` reports below 80% as a package, but that's one file
+skewing the average: `internal/mesh/device.go` creates a real kernel
+WireGuard interface and needs `CAP_NET_ADMIN` to run past construction,
+so it can't be exercised by `go test` at all — it's verified by the
+manual two-namespace runbook instead. Every other file in that package
+(netmap, UAPI config, keys) is independently ≥80%.
 
 ## Security notes
 
