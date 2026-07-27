@@ -192,8 +192,14 @@ func nextFreeMeshIP(used map[netip.Addr]bool) (string, error) {
 // registration — has both a WireGuard public key and an allocated mesh
 // IP. Revoked devices are included; callers (internal/mesh.BuildNetmap)
 // filter them out explicitly.
+//
+// Ordered by device_id: cerberusctl mesh up compares successive netmaps
+// element-by-element to decide whether to skip re-applying an unchanged
+// WireGuard config (see cmd/cerberusctl/mesh.go) — without a deterministic
+// order here, a poll that returns the identical device set in a different
+// row order would look like a change and trigger a needless rehandshake.
 func (s *Store) ListMeshDevices() ([]MeshDevice, error) {
-	rows, err := s.db.Query(`SELECT device_id, wg_pubkey, mesh_ip, mesh_endpoint, revoked FROM devices WHERE wg_pubkey IS NOT NULL AND mesh_ip IS NOT NULL`)
+	rows, err := s.db.Query(`SELECT device_id, wg_pubkey, mesh_ip, mesh_endpoint, revoked FROM devices WHERE wg_pubkey IS NOT NULL AND mesh_ip IS NOT NULL ORDER BY device_id`)
 	if err != nil {
 		return nil, err
 	}

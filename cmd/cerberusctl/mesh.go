@@ -26,8 +26,15 @@ const (
 // and authorized peer set from cerberus-ctrl, creates the kernel TUN
 // interface (requires root / CAP_NET_ADMIN), assigns the mesh address,
 // applies the initial peer set, then polls /mesh every 30s and
-// re-applies on change — exact structural mirror of
-// cmd/cerberus-gw/main.go's pollPolicy/fetchPolicy.
+// re-applies only when the peer set actually changed. The poll loop's
+// shape (mTLS client, time.Sleep(30*time.Second), log-and-continue on a
+// failed poll) mirrors cmd/cerberus-gw/main.go's pollPolicy/fetchPolicy —
+// but unlike that poller, which can afford to call SetPolicy
+// unconditionally every cycle, this one skips the apply when nothing
+// changed: BuildUAPIConfig's replace_peers=true tears down and
+// rehandshakes every live peer on each IpcSet, so re-applying an
+// unchanged netmap forever would mean a periodic connectivity blip on an
+// otherwise-idle, fully-working mesh.
 //
 // advertiseEndpoint, if non-empty, is reported to ctrl on the first call
 // only, so peers learn where to dial this device. At least one side of

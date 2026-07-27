@@ -173,3 +173,31 @@ func TestListMeshDevices_ReflectsReportedEndpoint(t *testing.T) {
 	require.Len(t, devices, 1)
 	require.Equal(t, "1.2.3.4:51820", devices[0].MeshEndpoint)
 }
+
+func TestListMeshDevices_OrderedByDeviceID(t *testing.T) {
+	s := openTestStore(t)
+	// Registered out of alphabetical device_id order, AND with wg_pubkey
+	// values that sort in yet another, unrelated order (zeta -> "mmm",
+	// alpha -> "zzz", mid -> "aaa") — deliberately decorrelated from
+	// device_id so this test can't pass by accident if the query happens
+	// to scan via the wg_pubkey index (sorted by pubkey) or insertion
+	// order instead of genuinely ordering by device_id. Only an actual
+	// "ORDER BY device_id" produces alpha, mid, zeta here.
+	devices := []struct{ id, pubkey string }{
+		{"zeta", "mmm-pubkey"},
+		{"alpha", "zzz-pubkey"},
+		{"mid", "aaa-pubkey"},
+	}
+	for _, d := range devices {
+		require.NoError(t, s.AddPendingDevice(d.id, d.id+"-tok"))
+		require.NoError(t, s.CompleteEnrollment(d.id, "cert-pem", d.id+"-serial"))
+		require.NoError(t, s.SetMeshPubkey(d.id, d.pubkey))
+		_, err := s.AllocateMeshIP(d.id)
+		require.NoError(t, err)
+	}
+
+	got, err := s.ListMeshDevices()
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	require.Equal(t, []string{"alpha", "mid", "zeta"}, []string{got[0].DeviceID, got[1].DeviceID, got[2].DeviceID})
+}
