@@ -50,6 +50,19 @@ func main() {
 			fmt.Fprintln(os.Stderr, "connect:", err)
 			os.Exit(1)
 		}
+	case "mesh":
+		if len(os.Args) < 4 || os.Args[2] != "up" {
+			fmt.Fprintln(os.Stderr, "usage: cerberusctl mesh up <ctrl_addr> [advertise_endpoint]")
+			os.Exit(1)
+		}
+		var endpoint string
+		if len(os.Args) >= 5 {
+			endpoint = os.Args[4]
+		}
+		if err := cmdMeshUp(stateDir, os.Args[3], endpoint); err != nil {
+			fmt.Fprintln(os.Stderr, "mesh up:", err)
+			os.Exit(1)
+		}
 	default:
 		usage()
 		os.Exit(1)
@@ -60,5 +73,6 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   cerberusctl enroll <ctrl_addr> <ca_cert_path> <token>
   cerberusctl login <ctrl_addr>
-  cerberusctl connect <gw_addr> <resource>`)
+  cerberusctl connect <gw_addr> <resource>
+  cerberusctl mesh up <ctrl_addr> [advertise_endpoint]  (requires root)`)
 }
