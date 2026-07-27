@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 
 	"github.com/CYC07/cerberus/internal/ca"
+	"github.com/CYC07/cerberus/internal/mesh"
 )
 
 func cmdEnroll(stateDir, ctrlAddr, caCertPath, token string) error {
@@ -40,11 +41,17 @@ func cmdEnroll(stateDir, ctrlAddr, caCertPath, token string) error {
 	}
 	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 
+	wgKeys, err := mesh.GenerateKeyPair()
+	if err != nil {
+		return fmt.Errorf("generate wireguard keypair: %w", err)
+	}
+
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
 	body, err := json.Marshal(struct {
-		Token string `json:"token"`
-		CSR   string `json:"csr_pem"`
-	}{Token: token, CSR: string(csrPEM)})
+		Token    string `json:"token"`
+		CSR      string `json:"csr_pem"`
+		WGPubkey string `json:"wg_pubkey"`
+	}{Token: token, CSR: string(csrPEM), WGPubkey: wgKeys.Public.String()})
 	if err != nil {
 		return err
 	}
@@ -60,6 +67,7 @@ func cmdEnroll(stateDir, ctrlAddr, caCertPath, token string) error {
 	var out struct {
 		CertPEM string `json:"cert_pem"`
 		CAPEM   string `json:"ca_pem"`
+		MeshIP  string `json:"mesh_ip"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return err
@@ -77,6 +85,12 @@ func cmdEnroll(stateDir, ctrlAddr, caCertPath, token string) error {
 	}
 	if err := os.WriteFile(filepath.Join(stateDir, "device.crt"), []byte(out.CertPEM), 0600); err != nil {
 		return err
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "mesh.key"), []byte(wgKeys.Private.String()), 0600); err != nil {
+		return fmt.Errorf("write mesh key: %w", err)
+	}
+	if out.MeshIP != "" {
+		fmt.Printf("mesh registered: %s\n", out.MeshIP)
 	}
 	return os.WriteFile(filepath.Join(stateDir, "ca.crt"), []byte(out.CAPEM), 0644)
 }
