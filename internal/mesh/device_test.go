@@ -15,5 +15,8 @@ import (
 func TestAssignAddress_RejectsInvalidCIDR(t *testing.T) {
 	d := &Device{name: "test0"}
 	err := d.AssignAddress("not-a-cidr")
-	require.Error(t, err)
+	// ErrorContains, not just Error: proves the netip.ParsePrefix guard
+	// fired, not some other failure — d.dev is nil on this bare Device, so
+	// anything past the guard would nil-panic before returning an error.
+	require.ErrorContains(t, err, "invalid mesh address")
 }
