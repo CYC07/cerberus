@@ -77,9 +77,9 @@ grants device-level L3 reachability, never per-resource control.
 The client side is `cerberusctl mesh up`, which brings up a real kernel
 WireGuard interface (`cerberus0`, always listening on UDP `51820`) and
 keeps it synced with `/mesh` — polling every 30s, re-applying only when
-the peer set actually changed. Like `cerberus-ctrl serve` and
-`cerberus-gw` above, it's a long-running process that never returns on
-its own, so run it the same way, with `&` (or a supervisor):
+the peer set actually changed. Like the other long-running processes in
+this file (`cerberus-ctrl serve`, `cerberus-gw`), it never returns on its
+own, so run it the same way, with `&` (or a supervisor):
 
 ```bash
 sudo CERBERUS_STATE_DIR=./cerberusctl-state \
